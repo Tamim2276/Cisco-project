@@ -450,3 +450,120 @@ router ospf 10
  network 10.77.255.16 0.0.0.3 area 0
  exit
 ```
+
+## 12. R5 ISP Router (WAN & Return Route)
+
+```ios
+enable
+configure terminal
+hostname R5_ISP
+
+! --- WAN Interface to R1 Core ---
+interface Se0/3/0
+ ip address 10.77.255.14 255.255.255.252
+ clock rate 64000
+ no shutdown
+ exit
+
+! --- Static Return Route to Enterprise Network ---
+! So ISP knows how to send replies back to all your internal subnets
+ip route 10.77.0.0 255.255.0.0 10.77.255.13
+```
+
+## 13. Final Verification Checks
+
+Run these from key devices to confirm the full network is working:
+
+```ios
+! On R1_Core
+show ip route
+show ip protocols
+
+! On R4_Backup
+show ip interface brief
+ping 10.77.255.9
+
+! On Server5 (Desktop > Command Prompt)
+ipconfig
+ping 10.77.1.129
+ping 10.77.255.9
+ping 10.77.2.98
+```
+
+## 14. Basic Security Hardening
+
+```ios
+! Apply on every router and switch
+enable
+configure terminal
+
+enable secret Cisco123!
+service password-encryption
+
+banner motd #
+Authorized access only. Disconnect immediately if you are not allowed.
+#
+
+line console 0
+ password Console123!
+ login
+ exit
+
+line vty 0 4
+ password Vty123!
+ login
+ exit
+
+end
+```
+
+## 15. ACL Implementation (Guest Isolation on R2)
+
+```ios
+! Apply on R2_Arena
+enable
+configure terminal
+
+! Block Guest VLAN from reaching sensitive internal VLANs
+ip access-list extended GUEST_ISOLATION
+ deny ip 10.77.0.0 0.0.0.255 10.77.2.32 0.0.0.31
+ deny ip 10.77.0.0 0.0.0.255 10.77.2.0 0.0.0.31
+ deny ip 10.77.0.0 0.0.0.255 10.77.2.64 0.0.0.31
+ deny ip 10.77.0.0 0.0.0.255 10.77.2.112 0.0.0.15
+
+ ! Allow Guest users to reach DMZ services
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.98 eq 80
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.99 eq 443
+ permit icmp 10.77.0.0 0.0.0.255 10.77.2.96 0.0.0.15
+
+ ! Allow all other traffic (including internet-bound traffic)
+ permit ip 10.77.0.0 0.0.0.255 any
+ exit
+
+! Apply ACL inbound on Guest VLAN subinterface
+interface g0/0.50
+ ip access-group GUEST_ISOLATION in
+ exit
+
+end
+```
+
+### ACL Test Checklist
+
+From a Guest PC:
+
+1. `ping 10.77.2.33` -> should FAIL (Admin VLAN blocked)
+2. `ping 10.77.2.1` -> should FAIL (Operations VLAN blocked)
+3. `ping 10.77.2.98` -> should PASS (DMZ allowed)
+4. `ping 10.77.255.14` -> should PASS (upstream reachability)
+
+On R2:
+
+1. `show access-lists GUEST_ISOLATION`
+2. `show ip interface g0/0.50`
+3. `show running-config | section interface GigabitEthernet0/0.50`
+
+```ios
+enable
+copy running-config startup-config
+```

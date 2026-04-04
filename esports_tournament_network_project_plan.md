@@ -24,13 +24,16 @@ Internet/Cloud
    |
   R5 (ISP)
    |
-  R1 (Core-ASBR) --- S1 (Servers)
+  R1 (Core)
  / |  \
 R2 R3  R4
 |  |   |
-S2 S4  S6
+S2 S3  S4
 |  |   |
-Users Users Backup
+Arena Ops Backup
+
+Core services:
+R1 --- S1 --- DMZ servers
 
 Extra resiliency link:
 R3 -------- R4  (backup WAN path)
@@ -38,11 +41,11 @@ R3 -------- R4  (backup WAN path)
 
 ### 2.2 Router Roles
 
-1. **R1**: Core router, redistribution point (ASBR), centralized DHCP, default route to ISP
-2. **R2**: Arena side (EIGRP domain), handles Players/Casters/Guests VLAN gateways
-3. **R3**: Operations side (RIP domain), handles Ops/Admin/Legacy VLAN gateways
-4. **R4**: Backup site router (OSPF domain)
-5. **R5**: ISP edge router
+1. **R1**: Core router and redistribution point, hosts centralized DHCP and the default route to the ISP
+2. **R2**: Arena router, runs EIGRP, and provides the gateway for VLANs 10/20/50
+3. **R3**: Operations router, runs RIP v2, and provides the gateway for VLANs 30/40/80
+4. **R4**: Backup router, runs OSPF, and provides the gateway for VLAN 90
+5. **R5**: ISP edge router with the return route back to the enterprise network
 
 ---
 
@@ -53,7 +56,7 @@ R3 -------- R4  (backup WAN path)
 1. Routers: 5
    - R1, R2, R3, R4, R5
 2. Switches: 4
-   - S1 (Core Services), S2 (Arena), S4 (Ops/Admin), S6 (Backup)
+   - S1 (Core Services), S2 (Arena), S3 (Operations), S4 (Backup)
 
 ### 3.2 Servers
 
@@ -66,23 +69,23 @@ Total Servers: 4
 
 ### 3.3 End Devices
 
-1. Player PCs: 20
-2. Caster PCs: 8
-3. Operations PCs: 6
-4. Admin PCs: 6
-5. Finance PCs: 4
-6. Guest laptops: 25
-7. Backup site PCs: 8
+1. Player PCs: 3
+2. Caster PCs: 1
+3. Guest PCs: 1
+4. Operations PCs: 1
+5. Admin PCs: 1
+6. Legacy devices: 1
+7. Backup site server/PC: 1
 
-Total End Devices: 77
+Total End Devices: 8
 
 ### 3.4 Grand Total
 
 1. Infrastructure devices (routers + switches): 9
 2. Servers: 4
-3. End devices: 77
+3. End devices: 8
 
-**Grand Total: 90 devices**
+**Grand Total: 21 devices**
 
 ---
 
@@ -95,17 +98,17 @@ Total End Devices: 77
 
 ### 4.2 VLAN/Subnet Allocation
 
-| Segment            | VLAN | Hosts Needed | Subnet         | Mask            | Default Gateway | DHCP Range              |
-| ------------------ | ---: | -----------: | -------------- | --------------- | --------------- | ----------------------- |
-| Guest Wi-Fi        |   50 |          200 | 10.77.0.0/24   | 255.255.255.0   | 10.77.0.1       | 10.77.0.50-10.77.0.230  |
-| Players            |   10 |          120 | 10.77.1.0/25   | 255.255.255.128 | 10.77.1.1       | 10.77.1.20-10.77.1.120  |
-| Backup Site        |   90 |           50 | 10.77.1.128/26 | 255.255.255.192 | 10.77.1.129     | 10.77.1.140-10.77.1.190 |
-| Casters/Media      |   20 |           60 | 10.77.1.192/26 | 255.255.255.192 | 10.77.1.193     | 10.77.1.200-10.77.1.250 |
-| Operations         |   30 |           30 | 10.77.2.0/27   | 255.255.255.224 | 10.77.2.1       | 10.77.2.10-10.77.2.30   |
-| Admin/Finance      |   40 |           25 | 10.77.2.32/27  | 255.255.255.224 | 10.77.2.33      | 10.77.2.40-10.77.2.58   |
-| Network Management |   70 |           20 | 10.77.2.64/27  | 255.255.255.224 | 10.77.2.65      | Mostly static           |
-| DMZ Servers        |   60 |           14 | 10.77.2.96/28  | 255.255.255.240 | 10.77.2.97      | Static only             |
-| Legacy Scoreboard  |   80 |           10 | 10.77.2.112/28 | 255.255.255.240 | 10.77.2.113     | 10.77.2.116-10.77.2.126 |
+| Segment           | VLAN | Hosts Needed | Subnet         | Mask            | Default Gateway | DHCP Range             |
+| ----------------- | ---: | -----------: | -------------- | --------------- | --------------- | ---------------------- |
+| Guest users       |   50 |            1 | 10.77.0.0/24   | 255.255.255.0   | 10.77.0.1       | DHCP on R1             |
+| Players           |   10 |            3 | 10.77.1.0/25   | 255.255.255.128 | 10.77.1.1       | DHCP on R1             |
+| Backup site users |   90 |            1 | 10.77.1.128/26 | 255.255.255.192 | 10.77.1.129     | DHCP on R1             |
+| Casters           |   20 |            1 | 10.77.1.192/26 | 255.255.255.192 | 10.77.1.193     | DHCP on R1             |
+| Operations        |   30 |            1 | 10.77.2.0/27   | 255.255.255.224 | 10.77.2.1       | DHCP on R1             |
+| Admin             |   40 |            1 | 10.77.2.32/27  | 255.255.255.224 | 10.77.2.33      | DHCP on R1             |
+| Management        |   70 |            4 | 10.77.2.64/27  | 255.255.255.224 | 10.77.2.65      | Static / server access |
+| DMZ Servers       |   60 |            4 | 10.77.2.96/28  | 255.255.255.240 | 10.77.2.97      | Static only            |
+| Legacy            |   80 |            1 | 10.77.2.112/28 | 255.255.255.240 | 10.77.2.113     | DHCP on R1             |
 
 ### 4.3 WAN /30 Links
 
@@ -122,7 +125,7 @@ Total End Devices: 77
 1. SRV1 Web: 10.77.2.98
 2. SRV2 Ticketing: 10.77.2.99
 3. SRV3 Stream: 10.77.2.100
-4. SRV4 NMS/Syslog: 10.77.2.101
+4. SRV4 NMS/Syslog: 10.77.2.66
 
 ---
 
@@ -135,18 +138,18 @@ Total End Devices: 77
 
 ### 5.2 WAN Cabling
 
-1. R1 S0/0/0 <-> R2 S0/0/0 (Serial)
-2. R1 S0/0/1 <-> R3 S0/0/0 (Serial)
-3. R1 S0/1/0 <-> R4 S0/0/0 (Serial)
-4. R1 S0/1/1 <-> R5 S0/0/0 (Serial)
-5. R3 S0/0/1 <-> R4 S0/0/1 (Serial, backup path)
+1. R1 Se0/3/0 <-> R2 Se0/3/0 (Serial)
+2. R1 Se0/3/1 <-> R3 Se0/3/0 (Serial)
+3. R1 Se0/2/0 <-> R4 Se0/3/0 (Serial)
+4. R1 Se0/2/1 <-> R5 Se0/3/0 (Serial)
+5. R3 Se0/3/1 <-> R4 Se0/3/1 (Serial, backup path)
 
 ### 5.3 LAN/Uplink Cabling
 
 1. R1 G0/0 <-> S1 G0/1 (Trunk)
 2. R2 G0/0 <-> S2 G0/1 (Trunk)
-3. R3 G0/0 <-> S4 G0/1 (Trunk)
-4. R4 G0/0 <-> S6 G0/1 (Access or single-VLAN trunk)
+3. R3 G0/0 <-> S3 G0/1 (Trunk)
+4. R4 G0/0 <-> S4 G0/1 (Access or single-VLAN uplink)
 
 ### 5.4 Server Cabling (to S1)
 
@@ -158,24 +161,24 @@ Total End Devices: 77
 ### 5.5 User Access Cabling
 
 1. S2 access ports for VLAN 10, 20, 50 user endpoints
-2. S4 access ports for VLAN 30, 40, 80 user endpoints
-3. S6 access ports for VLAN 90 backup-site endpoints
+2. S3 access ports for VLAN 30, 40, 80 user endpoints
+3. S4 access ports for VLAN 90 backup-site endpoints
 
 ---
 
 ## 6. VLAN Plan
 
-| VLAN ID | Name              | Subnet         |
-| ------: | ----------------- | -------------- |
-|      10 | Players           | 10.77.1.0/25   |
-|      20 | Casters           | 10.77.1.192/26 |
-|      30 | Operations        | 10.77.2.0/27   |
-|      40 | Admin/Finance     | 10.77.2.32/27  |
-|      50 | Guest             | 10.77.0.0/24   |
-|      60 | DMZ Servers       | 10.77.2.96/28  |
-|      70 | Mgmt              | 10.77.2.64/27  |
-|      80 | Legacy Scoreboard | 10.77.2.112/28 |
-|      90 | Backup Users      | 10.77.1.128/26 |
+| VLAN ID | Name         | Subnet         |
+| ------: | ------------ | -------------- |
+|      10 | Players      | 10.77.1.0/25   |
+|      20 | Casters      | 10.77.1.192/26 |
+|      30 | Operations   | 10.77.2.0/27   |
+|      40 | Admin        | 10.77.2.32/27  |
+|      50 | Guests       | 10.77.0.0/24   |
+|      60 | DMZ Servers  | 10.77.2.96/28  |
+|      70 | Management   | 10.77.2.64/27  |
+|      80 | Legacy       | 10.77.2.112/28 |
+|      90 | Backup Users | 10.77.1.128/26 |
 
 ---
 
@@ -186,7 +189,7 @@ Total End Devices: 77
 ### 7.1 R1 (Core-ASBR) Checklist
 
 1. Basic setup
-   - hostname, no ip domain-lookup, secure access
+   - hostname, secure access, centralized policy
 2. Interface IP configuration
    - Configure serial /30 links to R2, R3, R4, R5
    - `no shutdown` on all active interfaces
@@ -227,7 +230,7 @@ Total End Devices: 77
 ### 7.2 R2 (Arena Router - EIGRP Domain) Checklist
 
 1. Interface IPs
-   - S0/0/0 -> 10.77.255.2/30
+   - Se0/3/0 -> 10.77.255.2/30
    - G0/0 physical up
 2. Subinterfaces / VLAN gateways
    - G0/0.10 -> 10.77.1.1/25
@@ -240,8 +243,8 @@ Total End Devices: 77
    - `no auto-summary`
    - Advertise local VLAN subnets + R1 link
 5. ACL policy for guest isolation
-   - Deny Guest -> Admin/Finance subnets
-   - Permit Guest -> DMZ web/ticketing (required services)
+   - Deny Guest -> Admin subnet
+   - Permit Guest -> DMZ services that are required
    - Permit other needed traffic
    - Apply ACL inbound on VLAN 50 interface
 6. Verification
@@ -252,8 +255,8 @@ Total End Devices: 77
 ### 7.3 R3 (Operations Router - RIP Domain) Checklist
 
 1. Interface IPs
-   - S0/0/0 -> 10.77.255.6/30
-   - S0/0/1 -> 10.77.255.17/30
+   - Se0/3/0 -> 10.77.255.6/30
+   - Se0/3/1 -> 10.77.255.17/30
    - G0/0 physical up
 2. Subinterfaces / VLAN gateways
    - G0/0.30 -> 10.77.2.1/27
@@ -267,7 +270,7 @@ Total End Devices: 77
    - `no auto-summary`
    - Advertise local subnets + serial links
 5. Optional ACL hardening
-   - Additional restrictions for Finance segment
+   - Additional restrictions for Admin segment
 6. Verification
    - `show ip route rip`
    - `show ip rip database`
@@ -275,8 +278,8 @@ Total End Devices: 77
 ### 7.4 R4 (Backup Router - OSPF Domain) Checklist
 
 1. Interface IPs
-   - S0/0/0 -> 10.77.255.10/30
-   - S0/0/1 -> 10.77.255.18/30
+   - Se0/3/0 -> 10.77.255.10/30
+   - Se0/3/1 -> 10.77.255.18/30
    - G0/0 -> 10.77.1.129/26
 2. DHCP relay
    - `ip helper-address 10.77.255.1` on G0/0
@@ -290,7 +293,7 @@ Total End Devices: 77
 ### 7.5 R5 (ISP Router) Checklist
 
 1. Interface IP
-   - S0/0/0 -> 10.77.255.14/30
+   - Se0/3/0 -> 10.77.255.14/30
 2. Static return route
    - `ip route 10.77.0.0 255.255.0.0 10.77.255.13`
 3. Optional internet simulation
@@ -318,17 +321,18 @@ Total End Devices: 77
    - Casters -> VLAN 20
    - Guests -> VLAN 50
 
-### 8.3 S4 (Ops/Admin)
+### 8.3 S3 (Operations)
 
 1. Create VLAN 30, 40, 80
 2. Configure trunk to R3, allow VLAN 30,40,80
 3. Assign access ports by department
 
-### 8.4 S6 (Backup)
+### 8.4 S4 (Backup)
 
 1. Create VLAN 90
 2. Assign backup user ports to VLAN 90
-3. Configure uplink to R4 (access or trunk as designed)
+3. Configure uplink to R4 on G0/1
+4. Connect the backup server/PC to Fa0/1
 
 ---
 
@@ -342,7 +346,7 @@ Total End Devices: 77
 | EIGRP          | Arena domain between R1-R2 and associated VLAN networks               |
 | OSPF           | Core/backup domain between R1-R4 (+ service VLANs on R1)              |
 | RIP            | Operations/legacy domain on R3 and R1-R3 link                         |
-| ACL            | Guest isolation and controlled access to Admin/Finance/DMZ            |
+| ACL            | Guest isolation and controlled access to Admin/DMZ                    |
 | VLSM           | Variable subnet sizes across all LAN segments and /30 WAN links       |
 
 ---
@@ -351,7 +355,7 @@ Total End Devices: 77
 
 1. Test DHCP leases for Players, Guests, Admin, Backup clients
 2. Test inter-VLAN routing for authorized users
-3. Verify ACL blocks Guest -> Admin/Finance
+3. Verify ACL blocks Guest -> Admin
 4. Verify Guest can access allowed DMZ services
 5. Check routing tables on all routers
 6. Simulate WAN failure (disable one serial link) and verify alternate path behavior
