@@ -67,9 +67,24 @@ R3 -------- R4  (backup WAN path)
 
 Total Servers: 4
 
+### 3.2.1 Server Roles and Purpose
+
+1. **SRV1 Tournament Web (10.77.2.98)**
+   - Hosts tournament web/front-end content.
+   - Purpose: Demonstrates DMZ-hosted public service access from authorized users.
+2. **SRV2 Ticketing API (10.77.2.99)**
+   - Represents ticketing/backend API service.
+   - Purpose: Demonstrates business application reachability and segmentation in DMZ.
+3. **SRV3 Stream Relay (10.77.2.100)**
+   - Represents stream/media relay service.
+   - Purpose: Demonstrates service availability for event broadcast traffic.
+4. **SRV4 NMS/Syslog (10.77.2.66)**
+   - Management and logging endpoint on the management subnet.
+   - Purpose: Demonstrates operational monitoring separation from user networks.
+
 ### 3.3 End Devices
 
-1. Player PCs: 3
+1. Player PCs: 1
 2. Caster PCs: 1
 3. Guest PCs: 1
 4. Operations PCs: 1
@@ -77,15 +92,15 @@ Total Servers: 4
 6. Legacy devices: 1
 7. Backup site server/PC: 1
 
-Total End Devices: 8
+Total End Devices: 7
 
 ### 3.4 Grand Total
 
 1. Infrastructure devices (routers + switches): 9
 2. Servers: 4
-3. End devices: 8
+3. End devices: 7
 
-**Grand Total: 21 devices**
+**Grand Total: 20 devices**
 
 ---
 
@@ -125,7 +140,7 @@ Total End Devices: 8
 1. SRV1 Web: 10.77.2.98
 2. SRV2 Ticketing: 10.77.2.99
 3. SRV3 Stream: 10.77.2.100
-4. SRV4 NMS/Syslog: 10.77.2.66
+4. SRV4 NMS/Syslog (Management VLAN 70): 10.77.2.66
 
 ---
 
@@ -348,6 +363,47 @@ Total End Devices: 8
 | RIP            | Operations/legacy domain on R3 and R1-R3 link                         |
 | ACL            | Guest isolation and controlled access to Admin/DMZ                    |
 | VLSM           | Variable subnet sizes across all LAN segments and /30 WAN links       |
+
+---
+
+## 9.1 ACL Purpose and Usage in This Project
+
+### What ACL Is Doing
+
+In this topology, ACL is used as a security filter for Guest users.
+
+1. It blocks Guest VLAN traffic to sensitive internal networks (Admin, Operations, Management, Legacy).
+2. It allows approved traffic to required services (for example DMZ targets).
+3. It allows non-restricted traffic to continue toward upstream destinations.
+
+### Where ACL Is Applied
+
+1. Device: `R2_Arena`
+2. ACL name: `GUEST_ISOLATION`
+3. Interface: `g0/0.50` (Guest VLAN subinterface)
+4. Direction: inbound (`ip access-group GUEST_ISOLATION in`)
+
+### Why Inbound on Guest Interface
+
+1. Guest traffic is filtered immediately when it enters the router.
+2. Unauthorized traffic is dropped before it reaches protected networks.
+3. This reduces risk and unnecessary traffic in the core.
+
+### How to Demonstrate ACL Live
+
+From Guest PC:
+
+1. `ping 10.77.2.33` -> should fail (Admin blocked)
+2. `ping 10.77.2.1` -> should fail (Operations blocked)
+3. `ping 10.77.2.98` -> should pass (allowed DMZ target)
+
+On R2:
+
+1. `show access-lists GUEST_ISOLATION`
+
+Expected proof:
+
+1. Deny and permit lines show increasing match counters.
 
 ---
 
