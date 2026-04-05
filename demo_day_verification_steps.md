@@ -85,7 +85,7 @@ Pass if:
 
 ## 2. Verify Inter-VLAN Routing (Authorized Users)
 
-Use Player or Admin PC:
+Use Admin PC:
 
 ```bat
 :: DMZ Web server (VLAN 60 / 10.77.2.96/28)
@@ -101,6 +101,91 @@ Pass if:
 1. Pings to DMZ servers succeed
 2. Cross-VLAN communication works
 
+Note:
+
+1. Player and Caster VLANs are later validated with ACL-specific behavior in sections 2.1 and 2.2.
+
+## 2.1 Verify Player Block to Stream Relay
+
+On Player PC:
+
+```bat
+:: Stream Relay server - should be blocked
+ping 10.77.2.100
+:: Syslog server - should be blocked
+ping 10.77.2.66
+:: Ticket server ping may fail because only HTTPS is allowed by ACL
+ping 10.77.2.99
+```
+
+Then verify Ticketing service access from Player PC browser:
+
+```text
+https://10.77.2.99
+```
+
+Pass if:
+
+1. Ping to `10.77.2.100` fails
+2. Ping to `10.77.2.66` fails
+3. Ping to `10.77.2.99` may fail (ICMP not permitted)
+4. HTTPS to `10.77.2.99` succeeds
+
+On R2:
+
+```ios
+enable
+show access-lists PLAYER_STREAM_BLOCK
+show ip interface g0/0.10
+```
+
+Pass if:
+
+1. The ACL exists and counters increase after testing
+2. The Player subinterface shows the ACL applied inbound
+
+## 2.2 Verify Caster Access Policy
+
+On Caster PC:
+
+```bat
+:: Syslog - should be blocked
+ping 10.77.2.66
+:: Admin gateway - should be blocked
+ping 10.77.2.33
+:: Operations gateway - should be blocked
+ping 10.77.2.1
+:: Web server - should be allowed
+ping 10.77.2.98
+:: Stream Relay - should be allowed
+ping 10.77.2.100
+```
+
+Then verify Ticketing service access from Caster PC browser:
+
+```text
+https://10.77.2.99
+```
+
+Pass if:
+
+1. Pings to `10.77.2.66`, `10.77.2.33`, and `10.77.2.1` fail
+2. Pings to `10.77.2.98` and `10.77.2.100` succeed
+3. HTTPS to `10.77.2.99` succeeds
+
+On R2:
+
+```ios
+enable
+show access-lists CASTER_ACCESS_POLICY
+show ip interface g0/0.20
+```
+
+Pass if:
+
+1. The ACL exists and counters increase after testing
+2. The Caster subinterface shows the ACL applied inbound
+
 ---
 
 ## 3. Verify ACL Blocks Guest -> Admin
@@ -112,11 +197,13 @@ On Guest PC:
 ping 10.77.2.33
 :: Operations gateway (VLAN 30 / 10.77.2.0/27) - should be blocked
 ping 10.77.2.1
+:: Syslog server (VLAN 70 / 10.77.2.64/27) - should be blocked
+ping 10.77.2.66
 ```
 
 Pass if:
 
-1. Both fail (timeouts)
+1. All three fail (timeouts)
 
 Reason:
 
@@ -128,14 +215,25 @@ Reason:
 
 On Guest PC:
 
+```text
+http://10.77.2.98
+https://10.77.2.98
+http://10.77.2.100
+https://10.77.2.100
+https://10.77.2.99
+```
+
+Also verify that non-HTTP/HTTPS traffic is blocked:
+
 ```bat
-:: DMZ Web server (VLAN 60 / 10.77.2.96/28) - allowed target
 ping 10.77.2.98
+ping 10.77.255.14
 ```
 
 Pass if:
 
-1. Ping succeeds
+1. HTTP/HTTPS service access succeeds
+2. Non-HTTP/HTTPS tests fail
 
 Then on R2 to prove ACL activity:
 

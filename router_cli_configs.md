@@ -189,9 +189,9 @@ Click each server -> **Desktop** -> **IP Configuration**, then set them statical
   - Default Gateway: `10.77.2.97`
 
 - **Syslog Server (SRV4 on F0/5):**
-  - IP Address: `10.77.2.101`
-  - Subnet Mask: `255.255.255.240`
-  - Default Gateway: `10.77.2.97`
+  - IP Address: `10.77.2.66`
+  - Subnet Mask: `255.255.255.224`
+  - Default Gateway: `10.77.2.65`
 
 ---
 
@@ -270,7 +270,7 @@ router eigrp 100
 ```ios
 enable
 configure terminal
-hostname R3_Ops
+hostname R3_Operations
 
 ! Interface to R1 Core
 interface Se0/3/0
@@ -315,9 +315,7 @@ interface g0/0.80
 router rip
  version 2
  no auto-summary
- network 10.77.2.0
- network 10.77.255.4
- network 10.77.255.16
+ network 10.0.0.0
  exit
 ```
 
@@ -331,7 +329,7 @@ configure terminal
 hostname R4_Backup
 
 ! Interface to R1 Core
-interface Se0/2/0
+interface Se0/3/0
  ip address 10.77.255.10 255.255.255.252
  no shutdown
  exit
@@ -359,4 +357,89 @@ router ospf 10
  network 10.77.255.8 0.0.0.3 area 0
  network 10.77.255.16 0.0.0.3 area 0
  exit
+```
+
+---
+
+## 8. ACL Policies on R2 (Guest, Player, Caster)
+
+```ios
+enable
+configure terminal
+
+! -----------------------------
+! Guest isolation and web-only DMZ access
+! -----------------------------
+interface g0/0.50
+ no ip access-group GUEST_ISOLATION in
+ exit
+
+no ip access-list extended GUEST_ISOLATION
+
+ip access-list extended GUEST_ISOLATION
+ deny ip 10.77.0.0 0.0.0.255 10.77.2.32 0.0.0.31
+ deny ip 10.77.0.0 0.0.0.255 10.77.2.0 0.0.0.31
+ deny ip 10.77.0.0 0.0.0.255 10.77.2.64 0.0.0.31
+ deny ip 10.77.0.0 0.0.0.255 10.77.2.112 0.0.0.15
+ permit udp any eq bootpc any eq bootps
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.98 eq 80
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.98 eq 443
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.100 eq 80
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.100 eq 443
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.99 eq 443
+ deny ip 10.77.0.0 0.0.0.255 any
+ exit
+
+interface g0/0.50
+ ip access-group GUEST_ISOLATION in
+ exit
+
+! -----------------------------
+! Player policy: ticketing HTTPS only
+! -----------------------------
+interface g0/0.10
+ no ip access-group PLAYER_STREAM_BLOCK in
+ exit
+
+no ip access-list extended PLAYER_STREAM_BLOCK
+
+ip access-list extended PLAYER_STREAM_BLOCK
+ permit tcp 10.77.1.0 0.0.0.127 host 10.77.2.99 eq 443
+ deny ip 10.77.1.0 0.0.0.127 host 10.77.2.100
+ deny ip 10.77.1.0 0.0.0.127 host 10.77.2.66
+ permit ip 10.77.1.0 0.0.0.127 any
+ exit
+
+interface g0/0.10
+ ip access-group PLAYER_STREAM_BLOCK in
+ exit
+
+! -----------------------------
+! Caster policy: broadcast allowed, internal mgmt blocked
+! -----------------------------
+interface g0/0.20
+ no ip access-group CASTER_ACCESS_POLICY in
+ exit
+
+no ip access-list extended CASTER_ACCESS_POLICY
+
+ip access-list extended CASTER_ACCESS_POLICY
+ deny ip 10.77.1.192 0.0.0.63 host 10.77.2.66
+ deny ip 10.77.1.192 0.0.0.63 10.77.2.0 0.0.0.31
+ deny ip 10.77.1.192 0.0.0.63 10.77.2.32 0.0.0.31
+ deny ip 10.77.1.192 0.0.0.63 10.77.2.112 0.0.0.15
+ permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.98 eq 80
+ permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.98 eq 443
+ permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.99 eq 443
+ permit ip 10.77.1.192 0.0.0.63 host 10.77.2.100
+ permit icmp 10.77.1.192 0.0.0.63 10.77.2.96 0.0.0.15
+ permit ip 10.77.1.192 0.0.0.63 any
+ exit
+
+interface g0/0.20
+ ip access-group CASTER_ACCESS_POLICY in
+ exit
+
+end
+copy running-config startup-config
 ```

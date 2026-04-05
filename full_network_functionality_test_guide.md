@@ -266,13 +266,23 @@ ping 10.77.2.1
 ping 10.77.2.64
 ping 10.77.2.113
 ping 10.77.2.98
-ping 10.77.255.14
+```
+
+Browser tests from Guest PC:
+
+```text
+http://10.77.2.98
+https://10.77.2.98
+http://10.77.2.100
+https://10.77.2.100
+https://10.77.2.99
 ```
 
 Expected:
 
 1. Admin/Operations/Management/Legacy targets are blocked.
-2. Allowed DMZ target and upstream permitted traffic pass.
+2. ICMP to DMZ target is blocked by policy.
+3. Approved DMZ HTTP/HTTPS service access succeeds.
 
 Then on R2:
 
@@ -473,7 +483,12 @@ Success pattern:
 Extended IP access list GUEST_ISOLATION
 	deny ip 10.77.0.0 0.0.0.255 10.77.2.32 0.0.0.31 (x matches)
 	...
-	permit ip 10.77.0.0 0.0.0.255 any (y matches)
+	permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.98 eq 80 (x matches)
+	permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.98 eq 443 (x matches)
+	permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.100 eq 80 (x matches)
+	permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.100 eq 443 (x matches)
+	permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.99 eq 443 (x matches)
+	deny ip 10.77.0.0 0.0.0.255 any (x matches)
 ```
 
 Important check:
@@ -557,7 +572,14 @@ ping 10.77.0.1
 ping 10.77.2.33
 ping 10.77.2.1
 ping 10.77.2.98
-ping 10.77.255.14
+```
+
+Browser checks:
+
+```text
+http://10.77.2.98
+https://10.77.2.100
+https://10.77.2.99
 ```
 
 Expected output:
@@ -565,13 +587,14 @@ Expected output:
 1. `10.77.0.1` succeeds (local gateway).
 2. `10.77.2.33` fails (Admin blocked by ACL).
 3. `10.77.2.1` fails (Operations blocked by ACL).
-4. `10.77.2.98` succeeds (allowed DMZ path).
-5. `10.77.255.14` succeeds (upstream allowed by ACL permit any).
+4. `10.77.2.98` ping fails (ICMP not permitted).
+5. Approved HTTP/HTTPS DMZ services succeed in browser.
 
 Why it failed or reached:
 
 1. Failed to Admin/Ops is expected due ACL deny lines.
-2. Reached DMZ/upstream is expected due ACL permit lines.
+2. Failed DMZ ping is expected because ACL allows only HTTP/HTTPS.
+3. Browser access to approved services succeeds due permit tcp lines.
 
 ### 11.4 Ops_PC (VLAN 30)
 

@@ -524,6 +524,14 @@ end
 enable
 configure terminal
 
+! Remove old ACL from interface before rebuilding it
+interface g0/0.50
+ no ip access-group GUEST_ISOLATION in
+ exit
+
+! Delete old ACL so rule order is reset cleanly
+no ip access-list extended GUEST_ISOLATION
+
 ! Block Guest VLAN from reaching sensitive internal VLANs
 ip access-list extended GUEST_ISOLATION
  deny ip 10.77.0.0 0.0.0.255 10.77.2.32 0.0.0.31
@@ -531,13 +539,18 @@ ip access-list extended GUEST_ISOLATION
  deny ip 10.77.0.0 0.0.0.255 10.77.2.64 0.0.0.31
  deny ip 10.77.0.0 0.0.0.255 10.77.2.112 0.0.0.15
 
- ! Allow Guest users to reach DMZ services
- permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.98 eq 80
- permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.99 eq 443
- permit icmp 10.77.0.0 0.0.0.255 10.77.2.96 0.0.0.15
+ ! Allow DHCP client requests so relay on R2 still works
+ permit udp any eq bootpc any eq bootps
 
- ! Allow all other traffic (including internet-bound traffic)
- permit ip 10.77.0.0 0.0.0.255 any
+ ! Allow Guest users to reach only HTTP/HTTPS services
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.98 eq 80
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.98 eq 443
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.100 eq 80
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.100 eq 443
+ permit tcp 10.77.0.0 0.0.0.255 host 10.77.2.99 eq 443
+
+ ! Deny all other Guest traffic
+ deny ip 10.77.0.0 0.0.0.255 any
  exit
 
 ! Apply ACL inbound on Guest VLAN subinterface
@@ -554,8 +567,14 @@ From a Guest PC:
 
 1. `ping 10.77.2.33` -> should FAIL (Admin VLAN blocked)
 2. `ping 10.77.2.1` -> should FAIL (Operations VLAN blocked)
-3. `ping 10.77.2.98` -> should PASS (DMZ allowed)
-4. `ping 10.77.255.14` -> should PASS (upstream reachability)
+3. `ping 10.77.2.66` -> should FAIL (Management/Syslog blocked)
+4. `ping 10.77.2.98` -> should FAIL (ICMP not allowed)
+5. `ping 10.77.255.14` -> should FAIL (not permitted by Guest policy)
+6. `open browser http://10.77.2.98` -> should PASS (HTTP allowed)
+7. `open browser https://10.77.2.98` -> should PASS (HTTPS allowed)
+8. `open browser http://10.77.2.100` -> should PASS (Stream HTTP allowed)
+9. `open browser https://10.77.2.100` -> should PASS (Stream HTTPS allowed)
+10. `open browser https://10.77.2.99` -> should PASS (Ticketing HTTPS allowed)
 
 On R2:
 
@@ -567,3 +586,102 @@ On R2:
 enable
 copy running-config startup-config
 ```
+
+## 16. ACL Implementation (Player Access Policy on R2)
+
+Use this ACL if you want Player PCs to have limited access to Ticketing only, while blocking Stream Relay and Syslog.
+
+```ios
+enable
+configure terminal
+
+! Allow Player VLAN to reach Ticketing API only on HTTPS
+ip access-list extended PLAYER_STREAM_BLOCK
+ permit tcp 10.77.1.0 0.0.0.127 host 10.77.2.99 eq 443
+
+ ! Block Player VLAN access to Stream Relay
+ deny ip 10.77.1.0 0.0.0.127 host 10.77.2.100
+
+ ! Block Player VLAN access to Syslog server
+ deny ip 10.77.1.0 0.0.0.127 host 10.77.2.66
+
+ ! Allow all other traffic from Player VLAN
+ permit ip 10.77.1.0 0.0.0.127 any
+ exit
+
+! Apply ACL inbound on Player VLAN subinterface
+interface g0/0.10
+ ip access-group PLAYER_STREAM_BLOCK in
+ exit
+
+end
+copy running-config startup-config
+```
+
+### Player ACL Test Checklist
+
+From Player PC:
+
+1. `ping 10.77.2.100` -> should FAIL (Stream Relay blocked)
+2. `ping 10.77.2.66` -> should FAIL (Syslog blocked)
+3. `ping 10.77.2.99` -> may FAIL for ICMP (only HTTPS allowed)
+4. `open browser https://10.77.2.99` -> should PASS (Ticketing allowed on 443)
+
+On R2:
+
+1. `show access-lists PLAYER_STREAM_BLOCK`
+2. `show ip interface g0/0.10`
+
+This keeps Player access limited to Ticketing on HTTPS while blocking Stream Relay and Syslog.
+
+## 17. ACL Implementation (Caster Access Policy on R2)
+
+Use this ACL if you want Casters to access broadcast services but not management/internal operations networks.
+
+```ios
+enable
+configure terminal
+
+ip access-list extended CASTER_ACCESS_POLICY
+ ! Block Caster access to management/internal protected subnets
+ deny ip 10.77.1.192 0.0.0.63 host 10.77.2.66
+ deny ip 10.77.1.192 0.0.0.63 10.77.2.0 0.0.0.31
+ deny ip 10.77.1.192 0.0.0.63 10.77.2.32 0.0.0.31
+ deny ip 10.77.1.192 0.0.0.63 10.77.2.112 0.0.0.15
+
+ ! Allow Caster access to required DMZ services
+ permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.98 eq 80
+ permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.98 eq 443
+ permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.99 eq 443
+ permit ip 10.77.1.192 0.0.0.63 host 10.77.2.100
+ permit icmp 10.77.1.192 0.0.0.63 10.77.2.96 0.0.0.15
+
+ ! Allow all other non-blocked traffic
+ permit ip 10.77.1.192 0.0.0.63 any
+ exit
+
+interface g0/0.20
+ ip access-group CASTER_ACCESS_POLICY in
+ exit
+
+end
+copy running-config startup-config
+```
+
+### Caster ACL Test Checklist
+
+From Caster PC:
+
+1. `ping 10.77.2.66` -> should FAIL (Syslog blocked)
+2. `ping 10.77.2.33` -> should FAIL (Admin blocked)
+3. `ping 10.77.2.1` -> should FAIL (Operations blocked)
+4. `ping 10.77.2.98` -> should PASS (Web allowed)
+5. `ping 10.77.2.100` -> should PASS (Stream Relay allowed)
+6. `open browser https://10.77.2.99` -> should PASS (Ticketing HTTPS allowed)
+
+On R2:
+
+1. `show access-lists CASTER_ACCESS_POLICY`
+2. `show ip interface g0/0.20`
+
+This gives Casters the broadcast services they need while protecting management and internal business subnets.

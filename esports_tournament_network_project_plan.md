@@ -361,7 +361,7 @@ Total End Devices: 7
 | EIGRP          | Arena domain between R1-R2 and associated VLAN networks               |
 | OSPF           | Core/backup domain between R1-R4 (+ service VLANs on R1)              |
 | RIP            | Operations/legacy domain on R3 and R1-R3 link                         |
-| ACL            | Guest isolation and controlled access to Admin/DMZ                    |
+| ACL            | Guest isolation plus Player and Caster service-level restrictions     |
 | VLSM           | Variable subnet sizes across all LAN segments and /30 WAN links       |
 
 ---
@@ -373,8 +373,21 @@ Total End Devices: 7
 In this topology, ACL is used as a security filter for Guest users.
 
 1. It blocks Guest VLAN traffic to sensitive internal networks (Admin, Operations, Management, Legacy).
-2. It allows approved traffic to required services (for example DMZ targets).
-3. It allows non-restricted traffic to continue toward upstream destinations.
+2. It allows only required Guest service traffic (HTTP/HTTPS to approved DMZ hosts, including Stream server 10.77.2.100).
+3. It denies all other Guest traffic by policy.
+
+It is also used to stop Player PCs from reaching the Stream Relay server and the Syslog server.
+
+1. It blocks Player VLAN traffic to 10.77.2.100.
+2. It blocks Player VLAN traffic to 10.77.2.66.
+3. It allows only Ticketing API access on HTTPS (10.77.2.99:443).
+4. It gives you service-level control instead of blocking the whole DMZ.
+
+It is also used to enforce a Caster service policy.
+
+1. It blocks Caster access to Syslog and protected internal subnets (Ops/Admin/Legacy).
+2. It allows Caster access to Web, Ticketing (HTTPS), and Stream Relay services.
+3. It preserves operational segmentation while supporting broadcast workflows.
 
 ### Where ACL Is Applied
 
@@ -382,6 +395,16 @@ In this topology, ACL is used as a security filter for Guest users.
 2. ACL name: `GUEST_ISOLATION`
 3. Interface: `g0/0.50` (Guest VLAN subinterface)
 4. Direction: inbound (`ip access-group GUEST_ISOLATION in`)
+
+5. Device: `R2_Arena`
+6. ACL name: `PLAYER_STREAM_BLOCK`
+7. Interface: `g0/0.10` (Player VLAN subinterface)
+8. Direction: inbound (`ip access-group PLAYER_STREAM_BLOCK in`)
+
+9. Device: `R2_Arena`
+10. ACL name: `CASTER_ACCESS_POLICY`
+11. Interface: `g0/0.20` (Caster VLAN subinterface)
+12. Direction: inbound (`ip access-group CASTER_ACCESS_POLICY in`)
 
 ### Why Inbound on Guest Interface
 
@@ -395,7 +418,9 @@ From Guest PC:
 
 1. `ping 10.77.2.33` -> should fail (Admin blocked)
 2. `ping 10.77.2.1` -> should fail (Operations blocked)
-3. `ping 10.77.2.98` -> should pass (allowed DMZ target)
+3. `ping 10.77.2.98` -> should fail (ICMP not allowed)
+4. `http://10.77.2.98` -> should pass (HTTP allowed)
+5. `https://10.77.2.100` -> should pass (Stream HTTPS allowed)
 
 On R2:
 
@@ -412,10 +437,12 @@ Expected proof:
 1. Test DHCP leases for Players, Guests, Admin, Backup clients
 2. Test inter-VLAN routing for authorized users
 3. Verify ACL blocks Guest -> Admin
-4. Verify Guest can access allowed DMZ services
-5. Check routing tables on all routers
-6. Simulate WAN failure (disable one serial link) and verify alternate path behavior
-7. Save configs (`copy running-config startup-config`) on all routers and switches
+4. Verify Player ACL behavior (Stream Relay and Syslog blocked, Ticketing HTTPS allowed)
+5. Verify Caster ACL behavior (Ops/Admin/Syslog blocked, broadcast services allowed)
+6. Verify Guest can access allowed DMZ services
+7. Check routing tables on all routers
+8. Simulate WAN failure (disable one serial link) and verify alternate path behavior
+9. Save configs (`copy running-config startup-config`) on all routers and switches
 
 ---
 

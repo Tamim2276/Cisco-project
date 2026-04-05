@@ -125,8 +125,8 @@ Blocked examples:
 
 Allowed examples:
 
-1. Guest -> DMZ target(s)
-2. Guest -> upstream/other permitted traffic
+1. Guest -> approved DMZ HTTP/HTTPS services only
+2. Guest -> all non-approved traffic is denied
 
 ## 3.7 VLSM
 
@@ -267,9 +267,11 @@ Where to run:
 Commands:
 
 1. Guest PC: `ping 10.77.2.33` (should fail)
-2. Guest PC: `ping 10.77.2.98` (should pass)
-3. R2_Arena: `show access-lists GUEST_ISOLATION`
-4. R2_Arena: `show ip interface g0/0.50`
+2. Guest PC: `ping 10.77.2.98` (should fail, ICMP blocked)
+3. Guest PC Browser: `http://10.77.2.98` (should pass)
+4. Guest PC Browser: `https://10.77.2.100` (should pass)
+5. R2_Arena: `show access-lists GUEST_ISOLATION`
+6. R2_Arena: `show ip interface g0/0.50`
 
 Expected:
 
@@ -445,7 +447,7 @@ On each server: Desktop > IP Configuration
 
 ### B. Show DMZ Service Reachability
 
-From an Arena or Guest client Command Prompt:
+From an Admin or Caster client Command Prompt:
 
 1. `ping 10.77.2.98`
 2. `ping 10.77.2.99`
@@ -460,10 +462,15 @@ Expected:
 From Guest PC:
 
 1. `ping 10.77.2.66`
+2. `ping 10.77.2.98`
+3. Browser `http://10.77.2.98`
+4. Browser `https://10.77.2.100`
 
 Expected:
 
-1. Based on ACL policy, management/internal restricted targets should be blocked
+1. Guest ping to management/internal targets is blocked
+2. Guest ICMP to DMZ is blocked
+3. Guest HTTP/HTTPS to approved DMZ services is allowed
 
 ### D. Show Backup-Site Functionality
 
