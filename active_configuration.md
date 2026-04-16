@@ -597,6 +597,12 @@ configure terminal
 
 ! Allow Player VLAN to reach Ticketing API only on HTTPS
 ip access-list extended PLAYER_STREAM_BLOCK
+ ! Allow Player VLAN to reach Tournament Web (HTTP/HTTPS only)
+ permit tcp 10.77.1.0 0.0.0.127 host 10.77.2.98 eq 80
+ permit tcp 10.77.1.0 0.0.0.127 host 10.77.2.98 eq 443
+
+ ! Allow Player VLAN to reach Ticketing API (HTTP/HTTPS only)
+ permit tcp 10.77.1.0 0.0.0.127 host 10.77.2.99 eq 80
  permit tcp 10.77.1.0 0.0.0.127 host 10.77.2.99 eq 443
 
  ! Block Player VLAN access to Stream Relay
@@ -604,6 +610,10 @@ ip access-list extended PLAYER_STREAM_BLOCK
 
  ! Block Player VLAN access to Syslog server
  deny ip 10.77.1.0 0.0.0.127 host 10.77.2.66
+
+ ! Deny all other access to Tournament Web and Ticketing API
+ deny ip 10.77.1.0 0.0.0.127 host 10.77.2.98
+ deny ip 10.77.1.0 0.0.0.127 host 10.77.2.99
 
  ! Allow all other traffic from Player VLAN
  permit ip 10.77.1.0 0.0.0.127 any
@@ -634,14 +644,25 @@ On R2:
 
 This keeps Player access limited to Ticketing on HTTPS while blocking Stream Relay and Syslog.
 
+ip access-list extended CASTER_ACCESS_POLICY
+
 ## 17. ACL Implementation (Caster Access Policy on R2)
 
-Use this ACL if you want Casters to access broadcast services but not management/internal operations networks.
+Use this ACL if you want Casters to have **full access to the Stream Server (10.77.2.100)**, but only HTTP/HTTPS to Tournament Web (10.77.2.98) and Ticketing API (10.77.2.99), while blocking management/internal operations networks.
 
 ```ios
 enable
 configure terminal
 
+! Remove ACL from interface first (if applied)
+interface g0/0.20
+ no ip access-group CASTER_ACCESS_POLICY in
+ exit
+
+! Delete old ACL
+no ip access-list extended CASTER_ACCESS_POLICY
+
+! Recreate ACL
 ip access-list extended CASTER_ACCESS_POLICY
  ! Block Caster access to management/internal protected subnets
  deny ip 10.77.1.192 0.0.0.63 host 10.77.2.66
@@ -649,17 +670,26 @@ ip access-list extended CASTER_ACCESS_POLICY
  deny ip 10.77.1.192 0.0.0.63 10.77.2.32 0.0.0.31
  deny ip 10.77.1.192 0.0.0.63 10.77.2.112 0.0.0.15
 
- ! Allow Caster access to required DMZ services
+ ! Allow HTTP/HTTPS to Tournament Web
  permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.98 eq 80
  permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.98 eq 443
+
+ ! Allow HTTP/HTTPS to Ticketing API
+ permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.99 eq 80
  permit tcp 10.77.1.192 0.0.0.63 host 10.77.2.99 eq 443
+
+ ! Allow FULL access to Stream Server
  permit ip 10.77.1.192 0.0.0.63 host 10.77.2.100
- permit icmp 10.77.1.192 0.0.0.63 10.77.2.96 0.0.0.15
+
+ ! Deny all other access to Tournament Web and Ticketing API
+ deny ip 10.77.1.192 0.0.0.63 host 10.77.2.98
+ deny ip 10.77.1.192 0.0.0.63 host 10.77.2.99
 
  ! Allow all other non-blocked traffic
  permit ip 10.77.1.192 0.0.0.63 any
- exit
+exit
 
+! Reapply ACL to interface
 interface g0/0.20
  ip access-group CASTER_ACCESS_POLICY in
  exit
@@ -675,8 +705,8 @@ From Caster PC:
 1. `ping 10.77.2.66` -> should FAIL (Syslog blocked)
 2. `ping 10.77.2.33` -> should FAIL (Admin blocked)
 3. `ping 10.77.2.1` -> should FAIL (Operations blocked)
-4. `ping 10.77.2.98` -> should PASS (Web allowed)
-5. `ping 10.77.2.100` -> should PASS (Stream Relay allowed)
+4. `ping 10.77.2.98` -> should PASS (Web allowed, HTTP/HTTPS only)
+5. `ping 10.77.2.100` -> should PASS (Stream Server FULL access)
 6. `open browser https://10.77.2.99` -> should PASS (Ticketing HTTPS allowed)
 
 On R2:
@@ -684,4 +714,4 @@ On R2:
 1. `show access-lists CASTER_ACCESS_POLICY`
 2. `show ip interface g0/0.20`
 
-This gives Casters the broadcast services they need while protecting management and internal business subnets.
+This gives Casters full access to the Stream Server, HTTP/HTTPS to Tournament Web and Ticketing API, and blocks management/internal business subnets.
